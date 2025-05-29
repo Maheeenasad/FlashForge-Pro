@@ -1,5 +1,5 @@
-CardCrafter
-To use/dev
+
+To use/dev FlashForge Pro
 1. copy files
 2. go to favorite code editor
 3. cd or navigate to the files

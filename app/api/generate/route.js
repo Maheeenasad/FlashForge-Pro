@@ -1,5 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { NextResponse } from 'next/server';
 
 const systemPrompt = `
 You're a flashcard Creator. Your task is to generate concise and effective flashcards based on the given topic or content. Follow these guidelines:
@@ -30,27 +30,47 @@ Return in the following JSON Format
 `;
 
 export async function POST(req) {
-  const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-  const data = await req.text();
-
-  const completion = await genAI
-    .getGenerativeModel({
-      model: "gemini-1.5-pro",
-      systemInstruction: systemPrompt,
-    })
-    .generateContent(data);
-
-  const responseText = completion.response.candidates[0].content.parts[0].text;
-
-  const cleanText = responseText.replace(/```json\n/g, "").replace(/```/g, "");
   try {
-    const flashcards = JSON.parse(cleanText);
-    return NextResponse.json(flashcards.flashcards);
+    const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+    const data = await req.json();
+
+    if (!data.text) {
+      return NextResponse.json({ error: 'No text provided' }, { status: 400 });
+    }
+
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash-latest',
+      systemInstruction: systemPrompt
+    });
+
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: data.text }] }]
+    });
+
+    const response = await result.response;
+
+    if (!response.candidates || !response.candidates[0]?.content?.parts[0]?.text) {
+      throw new Error('Invalid response from API');
+    }
+
+    const responseText = response.candidates[0].content.parts[0].text;
+    const cleanText = responseText.replace(/```json\n?|```/g, '').trim();
+
+    try {
+      const flashcards = JSON.parse(cleanText);
+      return NextResponse.json(flashcards.flashcards || []);
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError);
+      return NextResponse.json({ error: 'Failed to parse API response' }, { status: 500 });
+    }
   } catch (error) {
-    console.error("Invalid JSON:", error);
+    console.error('API Error:', error);
     return NextResponse.json(
-      { error: { message: "Invalid JSON" } },
-      { status: 400 }
+      {
+        error: error.message || 'Internal server error',
+        details: error.errorDetails || null
+      },
+      { status: error.status || 500 }
     );
   }
 }
